@@ -1,16 +1,26 @@
 import Head from "next/head";
 import Image from "next/image";
-
-import { useKeenSlider } from "keen-slider/react";
-
-import shirtOne from "@/../public/assets/shirt_1.png";
-import shirtTwo from "@/../public/assets/shirt_2.png";
-import shirtThree from "@/../public/assets/shirt_3.png";
+import Stripe from 'stripe';
 
 import "keen-slider/keen-slider.min.css";
-import { HomeContainer, Product } from "@/styles/pages/home";
+import { useKeenSlider } from "keen-slider/react";
 
-export default function Home() {
+import { stripe } from "@/libs/stripe";
+
+import { HomeContainer, Product } from "@/styles/pages/home";
+import { dynamicBlurDataUrl } from "@/utils/dynamicBlurDataUrl";
+
+interface HomeProps {
+  products: {
+    id: string;
+    name: string;
+    imageUrl: string;
+    price: number;
+    blurHash: string;
+  }[]
+}
+
+export default function Home({ products }: HomeProps) {
   const [sliderRef] = useKeenSlider({
     slides: {
       perView: 3,
@@ -22,77 +32,52 @@ export default function Home() {
     <>
       <Head>
         <title>Ignite Shop</title>
-        <meta charSet="UTF-8"></meta>
-        <meta name="description" content="Free Web tutorials"></meta>
-        <meta name="keywords" content="HTML, CSS, JavaScript"></meta>
-        <meta name="author" content="John Doe"></meta>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0"></meta>
       </Head>
       <HomeContainer ref={sliderRef} className="keen-slider">
-        <Product className="keen-slider__slide">
-          <Image 
-            src={shirtOne}
-            alt="Camiseta"
-            width={520}
-            height={480}
-          />
+        {products.map((product) => (
+          <Product key={product.id} className="keen-slider__slide">
+            <Image 
+              src={product.imageUrl}
+              alt={product.name}
+              width={520}
+              height={480}              
+              blurDataURL={product.blurHash}
+              placeholder="blur"
+              loading="lazy"
+            />
 
-          <footer>
-            <strong>Camiseta x</strong>
-            <span>R$ 99,90</span>
-          </footer>
-        </Product>
-
-        <Product className="keen-slider__slide">
-          <Image 
-            src={shirtTwo}
-            alt="Camiseta"
-            width={520}
-            height={480}
-          />
-
-          <footer>
-            <strong>Camiseta x</strong>
-            <span>R$ 99,90</span>
-          </footer>
-        </Product>
-
-        <Product className="keen-slider__slide">
-          <Image 
-            src={shirtThree}
-            alt="Camiseta"
-            width={520}
-            height={480}
-          />
-
-          <footer>
-            <strong>Camiseta x</strong>
-            <span>R$ 99,90</span>
-          </footer>
-        </Product>
-
-        <Product className="keen-slider__slide">
-          <Image 
-            src={shirtThree}
-            alt="Camiseta"
-            width={520}
-            height={480}
-          />
-
-          <footer>
-            <strong>Camiseta x</strong>
-            <span>R$ 99,90</span>
-          </footer>
-        </Product>
+            <footer>
+              <strong>{product.name}</strong>
+              <span>{product.price}</span>
+            </footer>
+          </Product>
+        ))}
+        
       </HomeContainer>
     </>
   );
 }
 
+export async function getServerSideProps() {
+  const response = await stripe.products.list({
+    expand: ['data.default_price']
+  });
 
-export async function getStaticProps() {
+  const products = await Promise.all(response.data.map(async (product) => {
+    const price = product.default_price as Stripe.Price;
+
+    return {
+      id: product.id,
+      name: product.name,
+      imageUrl: product.images[0],
+      price: price.unit_amount as number / 100,
+      blurHash: await dynamicBlurDataUrl(product.images[0]),
+    }
+  }));
+
   return {
-    props: {},
-    revalidate: 60 * 60 * 24,
+    props: {
+      products,
+    },
   }
 }
